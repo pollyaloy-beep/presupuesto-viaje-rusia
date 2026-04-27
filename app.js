@@ -6,10 +6,10 @@ let expenses = [];
 let selectedCategory = 'food';
 let selectedSource = 'boda';
 
-const SUPABASE_KEY = localStorage.getItem('viaje-rusia-supabase-key');
 
 // Gun.js State
-const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']);
+// Using a more reliable relay peer
+const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://relay.peer.ooo/gun']);
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
 let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
 const room = gun.get(syncRoomId);
@@ -69,6 +69,7 @@ function init() {
     checkStandalone();
     
     // Auto-init Gun.js Sync
+    console.log("Iniciando sincronización con sala:", syncRoomId);
     initGunSync();
 }
 
