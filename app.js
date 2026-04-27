@@ -70,10 +70,6 @@ function init() {
     
     // Auto-init Gun.js Sync
     initGunSync();
-    
-    if (syncRoomId && syncRoomId !== DEFAULT_ROOM && SUPABASE_URL && SUPABASE_KEY) {
-        initSupabase();
-    }
 }
 
 // Service Worker Registration
@@ -113,9 +109,6 @@ function saveExpenses() {
     // Sync to Gun.js
     room.put({ expenses: JSON.stringify(expenses), last_update: Date.now() });
 
-    if (syncRoomId && supabaseClient) {
-        pushToCloud();
-    }
     if (ghToken && ghRepo) {
         pushToGitHub();
     }
@@ -343,93 +336,26 @@ function setupSyncListeners() {
     });
 }
 
-function initSupabase() {
-    if (!SUPABASE_URL || !SUPABASE_KEY) return;
-    
-    try {
-        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        startRealtimeSync();
-        updateSyncUI();
-    } catch (e) {
-        console.error("Error al conectar con Supabase:", e);
-    }
-}
-
-async function createRoom() {
-    // For a real app, you'd prompt for Supabase credentials if not set
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        promptForCredentials();
-        return;
-    }
-
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    syncRoomId = roomId;
-    localStorage.setItem('viaje-rusia-room-id', roomId);
-    
-    initSupabase();
-    await pushToCloud();
-    updateSyncUI();
+// Sync Functions
+function setupSyncListeners() {
+    btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toUpperCase()));
+    btnCopyCode.addEventListener('click', () => {
+        navigator.clipboard.writeText(syncRoomId);
+        btnCopyCode.innerHTML = '<i class="fa-solid fa-check"></i>';
+        setTimeout(() => btnCopyCode.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
+    });
 }
 
 async function joinRoom(code) {
     if (!code) return;
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        promptForCredentials();
-        return;
-    }
-
     syncRoomId = code;
     localStorage.setItem('viaje-rusia-room-id', code);
-    
-    initSupabase();
-    await pullFromCloud();
-    updateSyncUI();
-}
-
-function leaveRoom() {
-    if (confirm("¿Estás seguro de que quieres dejar la sala? Los datos se mantendrán solo en tu dispositivo.")) {
-        syncRoomId = null;
-        localStorage.removeItem('viaje-rusia-room-id');
-        updateSyncUI();
-    }
-}
-
-function promptForCredentials() {
-    const url = prompt("Introduce tu Supabase URL:");
-    const key = prompt("Introduce tu Supabase Anon Key:");
-    if (url && key) {
-        localStorage.setItem('viaje-rusia-supabase-url', url);
-        localStorage.setItem('viaje-rusia-supabase-key', key);
-        location.reload();
-    }
+    location.reload(); // Reload to reconnect Gun.js to new room
 }
 
 function updateSyncUI() {
-    if (syncRoomId) {
-        syncSetup.classList.add('hidden');
-        syncInfo.classList.remove('hidden');
-        displayRoomCode.textContent = syncRoomId;
-        syncStatus.className = 'sync-status connected';
-        syncStatus.querySelector('span').textContent = 'Sincronizado';
-        syncButton.classList.add('active');
-        
-        // Update QR
-        qrcodeEl.innerHTML = '';
-        new QRCode(qrcodeEl, {
-            text: syncRoomId,
-            width: 128,
-            height: 128,
-            colorDark : "#0284c7",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.H
-        });
-    } else {
-        syncSetup.classList.remove('hidden');
-        syncInfo.classList.add('hidden');
-        syncStatus.className = 'sync-status disconnected';
-        syncStatus.querySelector('span').textContent = 'Sin sincronizar';
-        syncButton.classList.remove('active');
-    }
+    displayRoomCode.textContent = syncRoomId;
+    syncButton.classList.add('active');
 }
 
 async function pushToCloud() {

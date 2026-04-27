@@ -154,24 +154,29 @@
                 <h2>Sincronización 🔄</h2>
                 <p class="sync-desc">Comparte el presupuesto con tu pareja en tiempo real.</p>
                 
-                <div id="sync-status" class="sync-status disconnected">
-                    <i class="fa-solid fa-circle-dot"></i> <span>Sin sincronizar</span>
+                <div id="sync-status" class="sync-status connected">
+                    <i class="fa-solid fa-circle-check"></i> <span>Sincronización Automática</span>
                 </div>
 
                 <div class="sync-actions">
                     <div id="sync-setup">
                         <div class="sync-tabs">
-                            <button class="tab-btn active" data-tab="cloud">Nube ☁️</button>
+                            <button class="tab-btn active" data-tab="cloud">Estado 📡</button>
                             <button class="tab-btn" data-tab="github">GitHub 🐙</button>
                         </div>
 
                         <div id="tab-cloud" class="tab-content">
-                            <button class="btn-primary full-width" id="btn-create-room">
-                                <i class="fa-solid fa-plus-circle"></i> Crear Nueva Sala
-                            </button>
-                            <div class="divider"><span>O</span></div>
+                            <p class="tab-info">Estás conectado a la sala compartida. No necesitas configurar nada.</p>
+                            <div class="room-code-box">
+                                <label>Código de sala actual:</label>
+                                <div class="code-display">
+                                    <span id="display-room-code">------</span>
+                                    <button id="btn-copy-code"><i class="fa-solid fa-copy"></i></button>
+                                </div>
+                            </div>
+                            <div class="divider"><span>CAMBIAR SALA</span></div>
                             <div class="join-group">
-                                <input type="text" id="join-code" placeholder="Código de sala">
+                                <input type="text" id="join-code" placeholder="Nuevo código">
                                 <button class="btn-secondary" id="btn-join-room">Unirse</button>
                             </div>
                         </div>
@@ -193,21 +198,9 @@
                     </div>
 
                     <div id="sync-info" class="hidden">
-                        <div class="room-code-box">
-                            <label>Tu código de sala:</label>
-                            <div class="code-display">
-                                <span id="display-room-code">------</span>
-                                <button id="btn-copy-code"><i class="fa-solid fa-copy"></i></button>
-                            </div>
-                        </div>
-                        <div class="qr-container">
-                            <div id="qrcode"></div>
-                            <p>Escanea este código para unirte</p>
-                        </div>
-                        <button class="btn-danger-outline full-width" id="btn-leave-room">
-                            <i class="fa-solid fa-right-from-bracket"></i> Salir de la sala
-                        </button>
+                        <!-- Simplified to use tab-cloud -->
                     </div>
+                </div>
                 </div>
             </div>
         </div>
