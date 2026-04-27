@@ -1,7 +1,12 @@
 // Supabase Config
 const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9zrAz8Yu85zKhPr01Pjwhw_E3iJGt0a";
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let db = null;
+try {
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch (e) {
+    console.error('Supabase no disponible:', e);
+}
 
 const GEMINI_KEY = "AIzaSyBA4s75OV-dJa5o4wsGYx2OIrO04QZ5AI8";
 
@@ -106,13 +111,14 @@ async function saveExpenses() {
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
     localStorage.setItem('viaje-rusia-last-update', now.toString());
 
-    const { error } = await db.from('budget_rooms').upsert({
-        id: syncRoomId,
-        expenses: expenses,
-        updated_at: new Date(now).toISOString()
-    });
-
-    if (error) console.error('Error sincronizando con Supabase:', error);
+    if (db) {
+        const { error } = await db.from('budget_rooms').upsert({
+            id: syncRoomId,
+            expenses: expenses,
+            updated_at: new Date(now).toISOString()
+        });
+        if (error) console.error('Error sincronizando con Supabase:', error);
+    }
 
     if (ghToken && ghRepo) {
         pushToGitHub();
@@ -121,11 +127,13 @@ async function saveExpenses() {
 
 // Supabase Realtime Sync
 function initSupabaseSync() {
+    if (!db) return;
     loadFromSupabase();
     subscribeToRoom(syncRoomId);
 }
 
 async function loadFromSupabase() {
+    if (!db) return;
     const { data, error } = await db
         .from('budget_rooms')
         .select('*')
@@ -138,6 +146,7 @@ async function loadFromSupabase() {
 }
 
 function subscribeToRoom(roomId) {
+    if (!db) return;
     if (supabaseChannel) {
         db.removeChannel(supabaseChannel);
     }
