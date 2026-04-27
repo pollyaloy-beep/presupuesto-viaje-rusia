@@ -1,6 +1,6 @@
 // Supabase Config
 const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
-const SUPABASE_KEY = "sb_secret_9Q0JFTasLSQMkdaOo5IeSQ_55_NdXCs";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind6cXllbXh1Ymlsem1pYmlmemF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMDcxODUsImV4cCI6MjA5Mjg4MzE4NX0.gGIHpgXHeGlSuUVIwA_LHKwpnrmTkW5Kk2_5I7x5WFo";
 let db = null;
 try {
     db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
