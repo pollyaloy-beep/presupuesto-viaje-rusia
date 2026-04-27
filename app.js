@@ -3,6 +3,8 @@ const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9zrAz8Yu85zKhPr01Pjwhw_E3iJGt0a";
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const GEMINI_KEY = "AIzaSyBA4s75OV-dJa5o4wsGYx2OIrO04QZ5AI8";
+
 // Exchange Rate: 1 EUR = X RUB
 const EXCHANGE_RATE = 90.00;
 
@@ -462,44 +464,51 @@ function removeExpense(id) {
     }
 }
 
-// OCR Receipt Scanner
+// Gemini Vision Receipt Scanner
 async function processReceiptImage(file) {
     modalOverlay.classList.remove('active');
     scannerOverlay.classList.remove('hidden');
-    setScanText('Cargando motor OCR...');
+    setScanText('Analizando recibo con IA... ✨');
 
     try {
-        const worker = await Tesseract.createWorker('rus+eng', 1, {
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    setScanText(`Leyendo texto... ${Math.round(m.progress * 100)}%`);
-                } else if (m.status === 'loading language traineddata') {
-                    setScanText('Cargando idioma ruso...');
-                }
+        const base64 = await fileToBase64(file);
+        const mimeType = file.type || 'image/jpeg';
+
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { inline_data: { mime_type: mimeType, data: base64 } },
+                            { text: 'Este es un recibo. Extrae: 1) El nombre del establecimiento o descripción breve del gasto (en el idioma original del recibo, máximo 50 caracteres). 2) El importe TOTAL a pagar en rublos (solo el número). Responde ÚNICAMENTE con este JSON exacto sin explicaciones: {"description": "nombre", "amount": 123.45}. Si no puedes leer algún campo usa null.' }
+                        ]
+                    }]
+                })
             }
-        });
+        );
 
-        setScanText('Analizando ticket... ✨');
-        const { data: { text } } = await worker.recognize(file);
-        await worker.terminate();
-
-        const { description, amount } = parseReceipt(text);
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*?\}/);
+        const result = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
         scannerOverlay.classList.add('hidden');
         modalOverlay.classList.add('active');
         document.querySelector('.action-buttons').classList.add('hidden');
         expenseForm.classList.remove('hidden');
 
-        if (description) document.getElementById('expense-desc').value = description;
-        if (amount) document.getElementById('expense-amount').value = amount;
+        if (result.description) document.getElementById('expense-desc').value = result.description;
+        if (result.amount) document.getElementById('expense-amount').value = result.amount;
 
     } catch (err) {
-        console.error('Error OCR:', err);
+        console.error('Error Gemini:', err);
         scannerOverlay.classList.add('hidden');
         modalOverlay.classList.add('active');
         document.querySelector('.action-buttons').classList.add('hidden');
         expenseForm.classList.remove('hidden');
-        setScanText('Analizando ticket... ✨');
     }
 }
 
@@ -508,40 +517,13 @@ function setScanText(text) {
     if (el) el.textContent = text;
 }
 
-function parseReceipt(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-
-    let amount = null;
-
-    // Search for total with Russian/English keywords
-    const totalRegex = /(?:итого|сумма|к\s*оплате|total|sum)[^\d]*(\d[\d\s]*[,\.]\d{2})/gi;
-    const match = totalRegex.exec(text);
-    if (match) {
-        amount = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
-    }
-
-    // Fallback: take the largest price-like number in the text
-    if (!amount) {
-        const prices = [];
-        const priceRegex = /(\d{1,6}[,\.]\d{2})/g;
-        let m;
-        while ((m = priceRegex.exec(text)) !== null) {
-            prices.push(parseFloat(m[1].replace(',', '.')));
-        }
-        if (prices.length > 0) amount = Math.max(...prices);
-    }
-
-    // Description: first meaningful non-numeric line
-    let description = '';
-    for (const line of lines) {
-        if (line.length >= 3 && !/^[\d\s,\.\-:]+$/.test(line)) {
-            description = line.substring(0, 50);
-            break;
-        }
-    }
-    if (!description) description = 'Gasto de recibo';
-
-    return { description, amount };
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 }
 
 // GitHub Backup
