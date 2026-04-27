@@ -6,11 +6,13 @@ let expenses = [];
 let selectedCategory = 'food';
 let selectedSource = 'boda';
 
-// Sync State
-let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || null;
-let supabaseClient = null;
-const SUPABASE_URL = localStorage.getItem('viaje-rusia-supabase-url');
 const SUPABASE_KEY = localStorage.getItem('viaje-rusia-supabase-key');
+
+// Gun.js State
+const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']);
+const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
+let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
+const room = gun.get(syncRoomId);
 
 // GitHub State
 let ghToken = localStorage.getItem('viaje-rusia-gh-token');
@@ -66,7 +68,10 @@ function init() {
     registerServiceWorker();
     checkStandalone();
     
-    if (syncRoomId && SUPABASE_URL && SUPABASE_KEY) {
+    // Auto-init Gun.js Sync
+    initGunSync();
+    
+    if (syncRoomId && syncRoomId !== DEFAULT_ROOM && SUPABASE_URL && SUPABASE_KEY) {
         initSupabase();
     }
 }
@@ -104,6 +109,10 @@ function loadExpenses() {
 // Save to LocalStorage
 function saveExpenses() {
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
+    
+    // Sync to Gun.js
+    room.put({ expenses: JSON.stringify(expenses), last_update: Date.now() });
+
     if (syncRoomId && supabaseClient) {
         pushToCloud();
     }
@@ -471,6 +480,22 @@ function startRealtimeSync() {
             }
         })
         .subscribe();
+}
+
+function initGunSync() {
+    room.on((data) => {
+        if (data && data.expenses) {
+            const remoteExpenses = JSON.parse(data.expenses);
+            // Only update if remote has more data or is newer
+            if (remoteExpenses.length > expenses.length) {
+                expenses = remoteExpenses;
+                localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
+                updateDashboard();
+                renderExpenses();
+                console.log("Sincronización Gun.js completada ✅");
+            }
+        }
+    });
 }
 
 async function pushToGitHub() {
