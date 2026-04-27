@@ -165,6 +165,13 @@ function subscribeToRoom(roomId) {
                 );
             }
         })
+        .on('broadcast', { event: 'heart' }, ({ payload }) => {
+            spawnHeart(
+                payload.rx * window.innerWidth,
+                payload.ry * window.innerHeight,
+                true
+            );
+        })
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 connectionDot.classList.add('online');
@@ -229,8 +236,8 @@ function updateBudget(source, spent, budget) {
 
     remEl.textContent = remaining >= 0
         ? `Quedan ${formatCurrency(remaining, '₽')}`
-        : `¡Superado ${formatCurrency(Math.abs(remaining), '₽')}!`;
-    remEl.className = 'source-remaining' + (remaining < 0 ? ' over-budget' : '');
+        : `⚠️ Superado ${formatCurrency(Math.abs(remaining), '₽')}`;
+    remEl.className = 'budget-left' + (remaining < 0 ? ' over-budget' : '');
 
     barEl.style.width = `${pct}%`;
     barEl.style.background = remaining < 0
@@ -497,5 +504,38 @@ async function pushToGitHub() {
     }
 }
 
+// ── HEARTS ──────────────────────────────────────────────
+function setupHearts() {
+    let lastTap = 0;
+    document.addEventListener('touchend', (e) => {
+        if (e.target.closest('button, input, select, a, .modal-overlay.active')) return;
+        const now = Date.now();
+        if (now - lastTap < 320) {
+            const t = e.changedTouches[0];
+            spawnHeart(t.clientX, t.clientY, false);
+            sendHeart(t.clientX / window.innerWidth, t.clientY / window.innerHeight);
+            e.preventDefault();
+        }
+        lastTap = now;
+    }, { passive: false });
+}
+
+function sendHeart(rx, ry) {
+    if (!supabaseChannel) return;
+    supabaseChannel.send({ type: 'broadcast', event: 'heart', payload: { rx, ry } });
+}
+
+function spawnHeart(x, y, fromPartner) {
+    const el = document.createElement('div');
+    el.className = 'heart-particle' + (fromPartner ? ' heart-partner' : '');
+    el.textContent = ['❤️','💖','💗','💓','💕'][Math.floor(Math.random() * 5)];
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+    el.style.fontSize = (28 + Math.random() * 20) + 'px';
+    document.body.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+}
+
 // Start App
 init();
+setupHearts();
