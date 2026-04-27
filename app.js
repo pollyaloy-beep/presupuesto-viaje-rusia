@@ -19,7 +19,7 @@ let selectedSource = 'boda';
 
 // Room State
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
-let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
+let syncRoomId = (localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM).toLowerCase();
 
 // GitHub State
 let ghToken = localStorage.getItem('viaje-rusia-gh-token');
@@ -399,7 +399,7 @@ function setupEventListeners() {
 
 // Sync Functions
 function setupSyncListeners() {
-    btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toUpperCase()));
+    btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toLowerCase()));
     btnCopyCode.addEventListener('click', () => {
         navigator.clipboard.writeText(syncRoomId);
         btnCopyCode.innerHTML = '<i class="fa-solid fa-check"></i>';
