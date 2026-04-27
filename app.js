@@ -7,25 +7,49 @@ let selectedCategory = 'food';
 let selectedSource = 'boda';
 
 
-// Gun.js State
-// High-performance peers
-const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://relay.peer.ooo/gun', 'https://gun-us.herokuapp.com/gun']);
+// Gun.js State - Super-Relay List
+const PEERS = [
+    'https://gun-manhattan.herokuapp.com/gun',
+    'https://relay.peer.ooo/gun',
+    'https://gun-us.herokuapp.com/gun',
+    'https://gun-eu.herokuapp.com/gun',
+    'https://gunjs.herokuapp.com/gun',
+    'https://gun-relay.herokuapp.com/gun',
+    'https://gun-amsterdam.herokuapp.com/gun'
+];
+
+let gun = Gun(PEERS);
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
 let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
-const room = gun.get(syncRoomId);
+let room = gun.get(syncRoomId);
 
-// Check connection status
-gun.on('hi', peer => {
-    console.log("Peer connected:", peer);
-    connectionDot.classList.add('online');
-});
-
-gun.on('bye', peer => {
-    console.log("Peer disconnected:", peer);
-    if (Object.keys(gun.back('opt.peers')).length === 0) {
-        connectionDot.classList.remove('online');
+// Connection Heartbeat
+function checkConnection() {
+    const peers = gun.back('opt.peers');
+    let connected = false;
+    for (let id in peers) {
+        if (peers[id].wire && peers[id].wire.readyState === 1) {
+            connected = true;
+            break;
+        }
     }
-});
+    
+    if (connected) {
+        connectionDot.classList.add('online');
+    } else {
+        connectionDot.classList.remove('online');
+        // Aggressive reconnection
+        console.log("Reconectando a peers...");
+        gun.opt({ peers: PEERS });
+    }
+}
+
+// Check every 3 seconds
+setInterval(checkConnection, 3000);
+
+// Gun events
+gun.on('hi', () => connectionDot.classList.add('online'));
+gun.on('bye', () => checkConnection());
 
 // GitHub State
 let ghToken = localStorage.getItem('viaje-rusia-gh-token');
@@ -315,6 +339,10 @@ function setupEventListeners() {
 
     // Sync Button
     syncButton.addEventListener('click', () => {
+        if (!connectionDot.classList.contains('online')) {
+            console.log("Forzando reconexión manual...");
+            gun.opt({ peers: PEERS });
+        }
         syncModal.classList.add('active');
         updateSyncUI();
     });
