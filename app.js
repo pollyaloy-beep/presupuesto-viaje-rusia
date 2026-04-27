@@ -179,9 +179,14 @@ function renderExpenses() {
                     <p>${formatDate(exp.date)} • <span style="text-transform: capitalize; color: var(--ocean-deep); font-weight: 600;">${exp.source}</span></p>
                 </div>
             </div>
-            <div class="expense-amounts">
-                <div class="expense-rub">${formatCurrency(exp.amount, '₽')}</div>
-                <div class="expense-eur">${formatCurrency(eurAmount, '€')}</div>
+            <div class="expense-right">
+                <div class="expense-amounts">
+                    <div class="expense-rub">${formatCurrency(exp.amount, '₽')}</div>
+                    <div class="expense-eur">${formatCurrency(eurAmount, '€')}</div>
+                </div>
+                <button class="delete-btn" onclick="removeExpense('${exp.id}')">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
             </div>
         `;
         expensesListEl.appendChild(el);
@@ -413,8 +418,8 @@ function initGunSync() {
     room.on((data) => {
         if (data && data.expenses) {
             const remoteExpenses = JSON.parse(data.expenses);
-            // Only update if remote has more data or is newer
-            if (remoteExpenses.length > expenses.length) {
+            // Update if different
+            if (JSON.stringify(remoteExpenses) !== JSON.stringify(expenses)) {
                 expenses = remoteExpenses;
                 localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
                 updateDashboard();
@@ -497,6 +502,15 @@ function addExpense(description, amount, category, source) {
     saveExpenses();
     updateDashboard();
     renderExpenses();
+}
+
+function removeExpense(id) {
+    if (confirm("¿Seguro que quieres borrar este gasto?")) {
+        expenses = expenses.filter(exp => exp.id !== id);
+        saveExpenses();
+        updateDashboard();
+        renderExpenses();
+    }
 }
 
 // Simulate AI Scanner

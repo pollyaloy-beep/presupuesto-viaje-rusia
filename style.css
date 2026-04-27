@@ -307,6 +307,33 @@ body {
     text-align: right;
 }
 
+.expense-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.2s;
+    opacity: 0.3;
+}
+
+.expense-item:hover .delete-btn {
+    opacity: 1;
+}
+
+.delete-btn:hover {
+    background: #fef2f2;
+    transform: scale(1.1);
+}
+
 .expense-rub {
     font-size: 16px;
     font-weight: 700;
