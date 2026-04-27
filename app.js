@@ -1,6 +1,6 @@
 // Supabase Config
 const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
-const SUPABASE_KEY = "sb_publishable_9zrAz8Yu85zKhPr01Pjwhw_E3iJGt0a";
+const SUPABASE_KEY = "sb_secret_9Q0JFTasLSQMkdaOo5IeSQ_55_NdXCs";
 let db = null;
 try {
     db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
