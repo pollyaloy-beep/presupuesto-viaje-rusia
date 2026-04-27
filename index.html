@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Presupuesto Viaje - Rusia</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- PWA / Mobile App tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Viaje 🎀">
+    <meta name="theme-color" content="#e0f2fe">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/201/201623.png">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>Mi Viaje <i class="fa-solid fa-plane"></i></h1>
+                <p>Control de presupuesto</p>
+                <div class="bow-decoration">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="bow-icon"><path d="M12 12c-2-2-4-4-4-6s2-4 4-4 4 2 4 4-2 4-4 6z"></path><path d="M12 12c-2 2-4 4-4 6s2 4 4 4 4-2 4-4-2-4-4-6z"></path><path d="M12 12L7 17"></path><path d="M12 12l5 5"></path></svg>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard / Balance -->
+        <section class="dashboard card">
+            <div class="balance-title">Total Gastado</div>
+            <div class="balance-amount" id="total-rub">0 ₽</div>
+            <div class="balance-converted" id="total-eur">(0.00 €)</div>
+            
+            <div class="source-breakdown">
+                <div class="source-col">
+                    <span class="source-label">Boda</span>
+                    <span class="source-val" id="total-boda">0 ₽</span>
+                </div>
+                <div class="source-col">
+                    <span class="source-label">Polina</span>
+                    <span class="source-val" id="total-polina">0 ₽</span>
+                </div>
+                <div class="source-col">
+                    <span class="source-label">Xevi</span>
+                    <span class="source-val" id="total-xevi">0 ₽</span>
+                </div>
+            </div>
+
+            <div class="exchange-rate-info">
+                <span><i class="fa-solid fa-money-bill-transfer"></i> Tasa de cambio: 1 € = <span id="rate-display">90</span> ₽</span>
+            </div>
+        </section>
+
+        <!-- Expenses List -->
+        <section class="expenses-section">
+            <div class="section-header">
+                <h2>Gastos Recientes</h2>
+                <div class="bow-small">🎀</div>
+            </div>
+            
+            <div class="expenses-list" id="expenses-list">
+                <!-- Expenses will be injected here via JS -->
+                <div class="empty-state">
+                    <i class="fa-solid fa-receipt"></i>
+                    <p>No hay gastos todavía.<br>¡Añade uno para empezar!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Floating Action Button -->
+        <button class="fab" id="fab-button">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+
+        <!-- Add Expense Modal -->
+        <div class="modal-overlay" id="add-modal">
+            <div class="modal-content card">
+                <button class="close-btn" id="close-modal"><i class="fa-solid fa-xmark"></i></button>
+                <h2>Añadir Gasto 🎀</h2>
+                
+                <div class="action-buttons">
+                    <button class="btn-primary" id="btn-manual">
+                        <i class="fa-solid fa-pen"></i> Manual
+                    </button>
+                    <label class="btn-secondary" for="camera-input">
+                        <i class="fa-solid fa-camera"></i> Foto
+                        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+                    </label>
+                </div>
+
+                <!-- Manual Form -->
+                <form id="expense-form" class="hidden">
+                    <div class="form-group">
+                        <label for="expense-desc">Concepto</label>
+                        <input type="text" id="expense-desc" placeholder="Ej: Cena en restaurante" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="expense-amount">Cantidad (RUB)</label>
+                        <div class="input-with-icon">
+                            <input type="number" id="expense-amount" placeholder="0" step="0.01" required>
+                            <span class="currency-symbol">₽</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Origen del dinero</label>
+                        <div class="source-selector">
+                            <div class="source-option selected" data-source="boda">Boda</div>
+                            <div class="source-option" data-source="polina">Polina</div>
+                            <div class="source-option" data-source="xevi">Xevi</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Categoría</label>
+                        <div class="category-selector">
+                            <div class="cat-option selected" data-cat="food"><i class="fa-solid fa-utensils"></i></div>
+                            <div class="cat-option" data-cat="transport"><i class="fa-solid fa-train"></i></div>
+                            <div class="cat-option" data-cat="hotel"><i class="fa-solid fa-bed"></i></div>
+                            <div class="cat-option" data-cat="shopping"><i class="fa-solid fa-bag-shopping"></i></div>
+                            <div class="cat-option" data-cat="other"><i class="fa-solid fa-star"></i></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-submit">Guardar Gasto</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Scanner Overlay -->
+        <div class="scanner-overlay hidden" id="scanner">
+            <div class="scanner-box">
+                <div class="scan-line"></div>
+                <div class="scan-text">Analizando ticket... ✨</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Safari Install Hint -->
+    <div id="safari-hint" class="safari-hint hidden">
+        <div class="hint-content">
+            <div class="hint-icon">🎀</div>
+            <p>¡Instala la app en tu iPhone! Toca <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/IOS_Share_Icon.svg/1024px-IOS_Share_Icon.svg.png" alt="share" width="20"> y luego <b>"Añadir a la pantalla de inicio"</b></p>
+            <button id="close-hint">Entendido</button>
+        </div>
+        <div class="hint-arrow"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
