@@ -11,6 +11,10 @@ try {
 // Exchange Rate: 1 EUR = X RUB
 const EXCHANGE_RATE = 90.00;
 
+// Budgets in RUB (Polina = unlimited)
+const BUDGET_BODA = 200 * EXCHANGE_RATE;  // 18,000 ₽
+const BUDGET_XEVI = 100 * EXCHANGE_RATE;  // 9,000 ₽
+
 // State
 let expenses = [];
 let supabaseChannel = null;
@@ -210,6 +214,23 @@ function updateDashboard() {
     totalBodaEl.textContent = formatCurrency(totalBoda, '₽');
     totalPolinaEl.textContent = formatCurrency(totalPolina, '₽');
     totalXeviEl.textContent = formatCurrency(totalXevi, '₽');
+
+    // Remaining budgets
+    const remainingBoda = BUDGET_BODA - totalBoda;
+    const remainingXevi = BUDGET_XEVI - totalXevi;
+
+    const remBodaEl = document.getElementById('remaining-boda');
+    const remXeviEl = document.getElementById('remaining-xevi');
+
+    remBodaEl.textContent = remainingBoda >= 0
+        ? `Quedan ${formatCurrency(remainingBoda, '₽')}`
+        : `¡Superado ${formatCurrency(Math.abs(remainingBoda), '₽')}!`;
+    remBodaEl.className = 'source-remaining' + (remainingBoda < 0 ? ' over-budget' : '');
+
+    remXeviEl.textContent = remainingXevi >= 0
+        ? `Quedan ${formatCurrency(remainingXevi, '₽')}`
+        : `¡Superado ${formatCurrency(Math.abs(remainingXevi), '₽')}!`;
+    remXeviEl.className = 'source-remaining' + (remainingXevi < 0 ? ' over-budget' : '');
 }
 
 // Format Currency

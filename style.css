@@ -232,6 +232,27 @@ body {
     color: var(--ocean-dark);
 }
 
+.source-remaining {
+    font-size: 10px;
+    font-weight: 600;
+    color: #16a34a;
+}
+
+.source-remaining.over-budget {
+    color: #dc2626;
+}
+
+.budget-tag {
+    font-size: 9px;
+    background: var(--ocean-light);
+    color: var(--ocean-deep);
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
 .exchange-rate-info {
     font-size: 12px;
     color: var(--text-muted);
