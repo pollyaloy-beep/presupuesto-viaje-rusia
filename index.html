@@ -21,10 +21,17 @@
         <!-- Header -->
         <header class="app-header">
             <div class="header-content">
-                <h1>Mi Viaje <i class="fa-solid fa-plane"></i></h1>
-                <p>Control de presupuesto</p>
-                <div class="bow-decoration">
-                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="bow-icon"><path d="M12 12c-2-2-4-4-4-6s2-4 4-4 4 2 4 4-2 4-4 6z"></path><path d="M12 12c-2 2-4 4-4 6s2 4 4 4 4-2 4-4-2-4-4-6z"></path><path d="M12 12L7 17"></path><path d="M12 12l5 5"></path></svg>
+                <div class="header-text">
+                    <h1>Mi Viaje <i class="fa-solid fa-plane"></i></h1>
+                    <p>Control de presupuesto</p>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn" id="sync-button" title="Sincronizar">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </button>
+                    <div class="bow-decoration">
+                        <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="bow-icon"><path d="M12 12c-2-2-4-4-4-6s2-4 4-4 4 2 4 4-2 4-4 6z"></path><path d="M12 12c-2 2-4 4-4 6s2 4 4 4 4-2 4-4-2-4-4-6z"></path><path d="M12 12L7 17"></path><path d="M12 12l5 5"></path></svg>
+                    </div>
                 </div>
             </div>
         </header>
@@ -139,6 +146,71 @@
                 <div class="scan-text">Analizando ticket... ✨</div>
             </div>
         </div>
+
+        <!-- Sync Modal -->
+        <div class="modal-overlay" id="sync-modal">
+            <div class="modal-content card sync-modal">
+                <button class="close-btn" id="close-sync-modal"><i class="fa-solid fa-xmark"></i></button>
+                <h2>Sincronización 🔄</h2>
+                <p class="sync-desc">Comparte el presupuesto con tu pareja en tiempo real.</p>
+                
+                <div id="sync-status" class="sync-status disconnected">
+                    <i class="fa-solid fa-circle-dot"></i> <span>Sin sincronizar</span>
+                </div>
+
+                <div class="sync-actions">
+                    <div id="sync-setup">
+                        <div class="sync-tabs">
+                            <button class="tab-btn active" data-tab="cloud">Nube ☁️</button>
+                            <button class="tab-btn" data-tab="github">GitHub 🐙</button>
+                        </div>
+
+                        <div id="tab-cloud" class="tab-content">
+                            <button class="btn-primary full-width" id="btn-create-room">
+                                <i class="fa-solid fa-plus-circle"></i> Crear Nueva Sala
+                            </button>
+                            <div class="divider"><span>O</span></div>
+                            <div class="join-group">
+                                <input type="text" id="join-code" placeholder="Código de sala">
+                                <button class="btn-secondary" id="btn-join-room">Unirse</button>
+                            </div>
+                        </div>
+
+                        <div id="tab-github" class="tab-content hidden">
+                            <p class="tab-info">Guarda los datos directamente en un archivo de tu repositorio.</p>
+                            <div class="form-group">
+                                <label>Token de Acceso (PAT)</label>
+                                <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
+                            </div>
+                            <div class="form-group">
+                                <label>Repositorio (usuario/repo)</label>
+                                <input type="text" id="gh-repo" placeholder="usuario/viaje-rusia">
+                            </div>
+                            <button class="btn-primary full-width" id="btn-save-github">
+                                <i class="fa-solid fa-save"></i> Conectar GitHub
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="sync-info" class="hidden">
+                        <div class="room-code-box">
+                            <label>Tu código de sala:</label>
+                            <div class="code-display">
+                                <span id="display-room-code">------</span>
+                                <button id="btn-copy-code"><i class="fa-solid fa-copy"></i></button>
+                            </div>
+                        </div>
+                        <div class="qr-container">
+                            <div id="qrcode"></div>
+                            <p>Escanea este código para unirte</p>
+                        </div>
+                        <button class="btn-danger-outline full-width" id="btn-leave-room">
+                            <i class="fa-solid fa-right-from-bracket"></i> Salir de la sala
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Safari Install Hint -->
@@ -151,6 +223,10 @@
         <div class="hint-arrow"></div>
     </div>
 
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
 </body>
 </html>

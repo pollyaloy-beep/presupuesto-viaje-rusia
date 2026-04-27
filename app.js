@@ -6,7 +6,38 @@ let expenses = [];
 let selectedCategory = 'food';
 let selectedSource = 'boda';
 
+// Sync State
+let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || null;
+let supabaseClient = null;
+const SUPABASE_URL = localStorage.getItem('viaje-rusia-supabase-url');
+const SUPABASE_KEY = localStorage.getItem('viaje-rusia-supabase-key');
+
+// GitHub State
+let ghToken = localStorage.getItem('viaje-rusia-gh-token');
+let ghRepo = localStorage.getItem('viaje-rusia-gh-repo');
+let ghFileSha = null;
+
 // DOM Elements
+const syncButton = document.getElementById('sync-button');
+const syncModal = document.getElementById('sync-modal');
+const closeSyncModal = document.getElementById('close-sync-modal');
+const btnCreateRoom = document.getElementById('btn-create-room');
+const btnJoinRoom = document.getElementById('btn-join-room');
+const btnLeaveRoom = document.getElementById('btn-leave-room');
+const joinCodeInput = document.getElementById('join-code');
+const displayRoomCode = document.getElementById('display-room-code');
+const syncStatus = document.getElementById('sync-status');
+const syncSetup = document.getElementById('sync-setup');
+const syncInfo = document.getElementById('sync-info');
+const btnCopyCode = document.getElementById('btn-copy-code');
+const qrcodeEl = document.getElementById('qrcode');
+
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+const ghTokenInput = document.getElementById('gh-token');
+const ghRepoInput = document.getElementById('gh-repo');
+const btnSaveGithub = document.getElementById('btn-save-github');
+
 const totalRubEl = document.getElementById('total-rub');
 const totalEurEl = document.getElementById('total-eur');
 const totalBodaEl = document.getElementById('total-boda');
@@ -31,8 +62,13 @@ function init() {
     updateDashboard();
     renderExpenses();
     setupEventListeners();
+    setupSyncListeners();
     registerServiceWorker();
     checkStandalone();
+    
+    if (syncRoomId && SUPABASE_URL && SUPABASE_KEY) {
+        initSupabase();
+    }
 }
 
 // Service Worker Registration
@@ -68,6 +104,12 @@ function loadExpenses() {
 // Save to LocalStorage
 function saveExpenses() {
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
+    if (syncRoomId && supabaseClient) {
+        pushToCloud();
+    }
+    if (ghToken && ghRepo) {
+        pushToGitHub();
+    }
 }
 
 // Update Dashboard Totals
@@ -242,6 +284,250 @@ function setupEventListeners() {
             safariHint.classList.add('hidden');
             localStorage.setItem('safari-hint-dismissed', 'true');
         });
+    }
+
+    // Sync Button
+    syncButton.addEventListener('click', () => {
+        syncModal.classList.add('active');
+        updateSyncUI();
+    });
+
+    closeSyncModal.addEventListener('click', () => {
+        syncModal.classList.remove('active');
+    });
+
+    // Tab Switching
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.add('hidden'));
+            btn.classList.add('active');
+            document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+        });
+    });
+
+    // GitHub Save
+    btnSaveGithub.addEventListener('click', () => {
+        ghToken = ghTokenInput.value.trim();
+        ghRepo = ghRepoInput.value.trim();
+        if (ghToken && ghRepo) {
+            localStorage.setItem('viaje-rusia-gh-token', ghToken);
+            localStorage.setItem('viaje-rusia-gh-repo', ghRepo);
+            alert("¡GitHub conectado! Los datos se sincronizarán con tu repositorio.");
+            pushToGitHub();
+        }
+    });
+
+    if (ghToken) ghTokenInput.value = ghToken;
+    if (ghRepo) ghRepoInput.value = ghRepo;
+}
+
+// Sync Functions
+function setupSyncListeners() {
+    btnCreateRoom.addEventListener('click', createRoom);
+    btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toUpperCase()));
+    btnLeaveRoom.addEventListener('click', leaveRoom);
+    btnCopyCode.addEventListener('click', () => {
+        navigator.clipboard.writeText(syncRoomId);
+        btnCopyCode.innerHTML = '<i class="fa-solid fa-check"></i>';
+        setTimeout(() => btnCopyCode.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
+    });
+}
+
+function initSupabase() {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return;
+    
+    try {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        startRealtimeSync();
+        updateSyncUI();
+    } catch (e) {
+        console.error("Error al conectar con Supabase:", e);
+    }
+}
+
+async function createRoom() {
+    // For a real app, you'd prompt for Supabase credentials if not set
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        promptForCredentials();
+        return;
+    }
+
+    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+    syncRoomId = roomId;
+    localStorage.setItem('viaje-rusia-room-id', roomId);
+    
+    initSupabase();
+    await pushToCloud();
+    updateSyncUI();
+}
+
+async function joinRoom(code) {
+    if (!code) return;
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        promptForCredentials();
+        return;
+    }
+
+    syncRoomId = code;
+    localStorage.setItem('viaje-rusia-room-id', code);
+    
+    initSupabase();
+    await pullFromCloud();
+    updateSyncUI();
+}
+
+function leaveRoom() {
+    if (confirm("¿Estás seguro de que quieres dejar la sala? Los datos se mantendrán solo en tu dispositivo.")) {
+        syncRoomId = null;
+        localStorage.removeItem('viaje-rusia-room-id');
+        updateSyncUI();
+    }
+}
+
+function promptForCredentials() {
+    const url = prompt("Introduce tu Supabase URL:");
+    const key = prompt("Introduce tu Supabase Anon Key:");
+    if (url && key) {
+        localStorage.setItem('viaje-rusia-supabase-url', url);
+        localStorage.setItem('viaje-rusia-supabase-key', key);
+        location.reload();
+    }
+}
+
+function updateSyncUI() {
+    if (syncRoomId) {
+        syncSetup.classList.add('hidden');
+        syncInfo.classList.remove('hidden');
+        displayRoomCode.textContent = syncRoomId;
+        syncStatus.className = 'sync-status connected';
+        syncStatus.querySelector('span').textContent = 'Sincronizado';
+        syncButton.classList.add('active');
+        
+        // Update QR
+        qrcodeEl.innerHTML = '';
+        new QRCode(qrcodeEl, {
+            text: syncRoomId,
+            width: 128,
+            height: 128,
+            colorDark : "#0284c7",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+    } else {
+        syncSetup.classList.remove('hidden');
+        syncInfo.classList.add('hidden');
+        syncStatus.className = 'sync-status disconnected';
+        syncStatus.querySelector('span').textContent = 'Sin sincronizar';
+        syncButton.classList.remove('active');
+    }
+}
+
+async function pushToCloud() {
+    if (!supabaseClient || !syncRoomId) return;
+    
+    const { error } = await supabaseClient
+        .from('budget_rooms')
+        .upsert({ id: syncRoomId, expenses: expenses, updated_at: new Date().toISOString() });
+        
+    if (error) console.error("Error al subir a la nube:", error);
+}
+
+async function pullFromCloud() {
+    if (!supabaseClient || !syncRoomId) return;
+    
+    const { data, error } = await supabaseClient
+        .from('budget_rooms')
+        .select('expenses')
+        .eq('id', syncRoomId)
+        .single();
+        
+    if (error) {
+        console.error("Error al bajar de la nube:", error);
+    } else if (data) {
+        expenses = data.expenses;
+        saveExpenses();
+        updateDashboard();
+        renderExpenses();
+    }
+}
+
+function startRealtimeSync() {
+    if (!supabaseClient || !syncRoomId) return;
+    
+    supabaseClient
+        .channel('schema-db-changes')
+        .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'budget_rooms', 
+            filter: `id=eq.${syncRoomId}` 
+        }, payload => {
+            if (payload.new && payload.new.expenses) {
+                // Merging logic could be complex, for now we just take the latest
+                expenses = payload.new.expenses;
+                updateDashboard();
+                renderExpenses();
+            }
+        })
+        .subscribe();
+}
+
+async function pushToGitHub() {
+    if (!ghToken || !ghRepo) return;
+    
+    const url = `https://api.github.com/repos/${ghRepo}/contents/expenses.json`;
+    const content = btoa(JSON.stringify(expenses, null, 2));
+    
+    try {
+        // First get the SHA if file exists
+        const getRes = await fetch(url, {
+            headers: { 'Authorization': `token ${ghToken}` }
+        });
+        
+        let sha = null;
+        if (getRes.status === 200) {
+            const data = await getRes.json();
+            sha = data.sha;
+        }
+        
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${ghToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: 'Update budget expenses',
+                content: content,
+                sha: sha
+            })
+        });
+        
+        if (res.ok) console.log("Sincronizado con GitHub ✅");
+        else console.error("Error al sincronizar con GitHub", await res.json());
+    } catch (e) {
+        console.error("Error GitHub API:", e);
+    }
+}
+
+async function pullFromGitHub() {
+    if (!ghToken || !ghRepo) return;
+    const url = `https://api.github.com/repos/${ghRepo}/contents/expenses.json`;
+    
+    try {
+        const res = await fetch(url, {
+            headers: { 'Authorization': `token ${ghToken}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            expenses = JSON.parse(atob(data.content));
+            saveExpenses();
+            updateDashboard();
+            renderExpenses();
+        }
+    } catch (e) {
+        console.error("Error al bajar de GitHub:", e);
     }
 }
 
