@@ -8,11 +8,24 @@ let selectedSource = 'boda';
 
 
 // Gun.js State
-// Using a more reliable relay peer
-const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://relay.peer.ooo/gun']);
+// High-performance peers
+const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://relay.peer.ooo/gun', 'https://gun-us.herokuapp.com/gun']);
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
 let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
 const room = gun.get(syncRoomId);
+
+// Check connection status
+gun.on('hi', peer => {
+    console.log("Peer connected:", peer);
+    connectionDot.classList.add('online');
+});
+
+gun.on('bye', peer => {
+    console.log("Peer disconnected:", peer);
+    if (Object.keys(gun.back('opt.peers')).length === 0) {
+        connectionDot.classList.remove('online');
+    }
+});
 
 // GitHub State
 let ghToken = localStorage.getItem('viaje-rusia-gh-token');
@@ -33,6 +46,7 @@ const syncSetup = document.getElementById('sync-setup');
 const syncInfo = document.getElementById('sync-info');
 const btnCopyCode = document.getElementById('btn-copy-code');
 const qrcodeEl = document.getElementById('qrcode');
+const connectionDot = document.getElementById('connection-dot');
 
 const tabBtns = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -105,10 +119,15 @@ function loadExpenses() {
 
 // Save to LocalStorage
 function saveExpenses() {
+    const now = Date.now();
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
+    localStorage.setItem('viaje-rusia-last-update', now.toString());
     
-    // Sync to Gun.js
-    room.put({ expenses: JSON.stringify(expenses), last_update: Date.now() });
+    // Sync to Gun.js with timestamp
+    room.put({ 
+        expenses: JSON.stringify(expenses), 
+        last_update: now 
+    });
 
     if (ghToken && ghRepo) {
         pushToGitHub();
@@ -332,18 +351,6 @@ function setupEventListeners() {
 
 // Sync Functions
 function setupSyncListeners() {
-    btnCreateRoom.addEventListener('click', createRoom);
-    btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toUpperCase()));
-    btnLeaveRoom.addEventListener('click', leaveRoom);
-    btnCopyCode.addEventListener('click', () => {
-        navigator.clipboard.writeText(syncRoomId);
-        btnCopyCode.innerHTML = '<i class="fa-solid fa-check"></i>';
-        setTimeout(() => btnCopyCode.innerHTML = '<i class="fa-solid fa-copy"></i>', 2000);
-    });
-}
-
-// Sync Functions
-function setupSyncListeners() {
     btnJoinRoom.addEventListener('click', () => joinRoom(joinCodeInput.value.trim().toUpperCase()));
     btnCopyCode.addEventListener('click', () => {
         navigator.clipboard.writeText(syncRoomId);
@@ -364,67 +371,46 @@ function updateSyncUI() {
     syncButton.classList.add('active');
 }
 
-async function pushToCloud() {
-    if (!supabaseClient || !syncRoomId) return;
-    
-    const { error } = await supabaseClient
-        .from('budget_rooms')
-        .upsert({ id: syncRoomId, expenses: expenses, updated_at: new Date().toISOString() });
-        
-    if (error) console.error("Error al subir a la nube:", error);
-}
-
-async function pullFromCloud() {
-    if (!supabaseClient || !syncRoomId) return;
-    
-    const { data, error } = await supabaseClient
-        .from('budget_rooms')
-        .select('expenses')
-        .eq('id', syncRoomId)
-        .single();
-        
-    if (error) {
-        console.error("Error al bajar de la nube:", error);
-    } else if (data) {
-        expenses = data.expenses;
-        saveExpenses();
-        updateDashboard();
-        renderExpenses();
-    }
-}
-
-function startRealtimeSync() {
-    if (!supabaseClient || !syncRoomId) return;
-    
-    supabaseClient
-        .channel('schema-db-changes')
-        .on('postgres_changes', { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'budget_rooms', 
-            filter: `id=eq.${syncRoomId}` 
-        }, payload => {
-            if (payload.new && payload.new.expenses) {
-                // Merging logic could be complex, for now we just take the latest
-                expenses = payload.new.expenses;
-                updateDashboard();
-                renderExpenses();
-            }
-        })
-        .subscribe();
-}
-
 function initGunSync() {
+    let lastLocalUpdate = parseInt(localStorage.getItem('viaje-rusia-last-update') || '0');
+
     room.on((data) => {
         if (data && data.expenses) {
-            const remoteExpenses = JSON.parse(data.expenses);
-            // Update if different
-            if (JSON.stringify(remoteExpenses) !== JSON.stringify(expenses)) {
-                expenses = remoteExpenses;
+            const remoteUpdate = data.last_update || 0;
+            
+            if (remoteUpdate > lastLocalUpdate) {
+                const remoteExpenses = JSON.parse(data.expenses);
+                
+                // Merging logic: Keep all unique expenses from both sides
+                const localIds = new Set(expenses.map(e => e.id));
+                let merged = [...expenses];
+                let hasNew = false;
+
+                remoteExpenses.forEach(re => {
+                    if (!localIds.has(re.id)) {
+                        merged.push(re);
+                        hasNew = true;
+                    }
+                });
+
+                // If remote has fewer expenses than merged, it might be a deletion
+                // But for now, we prioritize additions to be safe.
+                // For deletions to work, we'd need a tombstone system.
+                // Simple compromise: if lengths are different and remote is newer, take remote.
+                if (remoteExpenses.length < merged.length && remoteUpdate > lastLocalUpdate) {
+                   // This is likely a deletion on the other side
+                   expenses = remoteExpenses;
+                } else {
+                   expenses = merged;
+                }
+
+                expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
+                lastLocalUpdate = remoteUpdate;
+                localStorage.setItem('viaje-rusia-last-update', lastLocalUpdate.toString());
                 localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
                 updateDashboard();
                 renderExpenses();
-                console.log("Sincronización Gun.js completada ✅");
+                console.log("Sincronización inteligente (v2) completada ✅");
             }
         }
     });
@@ -465,26 +451,6 @@ async function pushToGitHub() {
         else console.error("Error al sincronizar con GitHub", await res.json());
     } catch (e) {
         console.error("Error GitHub API:", e);
-    }
-}
-
-async function pullFromGitHub() {
-    if (!ghToken || !ghRepo) return;
-    const url = `https://api.github.com/repos/${ghRepo}/contents/expenses.json`;
-    
-    try {
-        const res = await fetch(url, {
-            headers: { 'Authorization': `token ${ghToken}` }
-        });
-        if (res.ok) {
-            const data = await res.json();
-            expenses = JSON.parse(atob(data.content));
-            saveExpenses();
-            updateDashboard();
-            renderExpenses();
-        }
-    } catch (e) {
-        console.error("Error al bajar de GitHub:", e);
     }
 }
 
