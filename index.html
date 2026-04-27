@@ -90,18 +90,8 @@
                 <button class="close-btn" id="close-modal"><i class="fa-solid fa-xmark"></i></button>
                 <h2>Añadir Gasto 🎀</h2>
                 
-                <div class="action-buttons">
-                    <button class="btn-primary" id="btn-manual">
-                        <i class="fa-solid fa-pen"></i> Manual
-                    </button>
-                    <label class="btn-secondary" for="camera-input">
-                        <i class="fa-solid fa-camera"></i> Foto
-                        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
-                    </label>
-                </div>
-
-                <!-- Manual Form -->
-                <form id="expense-form" class="hidden">
+                <!-- Form -->
+                <form id="expense-form">
                     <div class="form-group">
                         <label for="expense-desc">Concepto</label>
                         <input type="text" id="expense-desc" placeholder="Ej: Cena en restaurante" required>
@@ -137,14 +127,6 @@
                     
                     <button type="submit" class="btn-submit">Guardar Gasto</button>
                 </form>
-            </div>
-        </div>
-
-        <!-- Scanner Overlay -->
-        <div class="scanner-overlay hidden" id="scanner">
-            <div class="scanner-box">
-                <div class="scan-line"></div>
-                <div class="scan-text">Analizando ticket... ✨</div>
             </div>
         </div>
 

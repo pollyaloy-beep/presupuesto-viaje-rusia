@@ -8,16 +8,14 @@ try {
     console.error('Supabase no disponible:', e);
 }
 
-const GEMINI_KEY = "AIzaSyBA4s75OV-dJa5o4wsGYx2OIrO04QZ5AI8";
-
 // Exchange Rate: 1 EUR = X RUB
 const EXCHANGE_RATE = 90.00;
 
 // State
 let expenses = [];
+let supabaseChannel = null;
 let selectedCategory = 'food';
 let selectedSource = 'boda';
-let supabaseChannel = null;
 
 // Room State
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
@@ -53,12 +51,9 @@ const expensesListEl = document.getElementById('expenses-list');
 const fabButton = document.getElementById('fab-button');
 const modalOverlay = document.getElementById('add-modal');
 const closeModal = document.getElementById('close-modal');
-const btnManual = document.getElementById('btn-manual');
-const cameraInput = document.getElementById('camera-input');
 const expenseForm = document.getElementById('expense-form');
 const catOptions = document.querySelectorAll('.cat-option');
 const sourceOptions = document.querySelectorAll('.source-option');
-const scannerOverlay = document.getElementById('scanner');
 
 // Initialize
 function init() {
@@ -292,26 +287,12 @@ function getCategoryIcon(cat) {
 function setupEventListeners() {
     fabButton.addEventListener('click', () => {
         modalOverlay.classList.add('active');
-        expenseForm.classList.add('hidden');
-        document.querySelector('.action-buttons').classList.remove('hidden');
+        document.getElementById('expense-desc').focus();
     });
 
     closeModal.addEventListener('click', () => {
         modalOverlay.classList.remove('active');
         expenseForm.reset();
-    });
-
-    btnManual.addEventListener('click', () => {
-        document.querySelector('.action-buttons').classList.add('hidden');
-        expenseForm.classList.remove('hidden');
-        document.getElementById('expense-desc').focus();
-    });
-
-    cameraInput.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            processReceiptImage(e.target.files[0]);
-            e.target.value = '';
-        }
     });
 
     catOptions.forEach(opt => {
@@ -339,14 +320,6 @@ function setupEventListeners() {
         addExpense(desc, amount, selectedCategory, selectedSource);
         modalOverlay.classList.remove('active');
         expenseForm.reset();
-
-        catOptions.forEach(o => o.classList.remove('selected'));
-        document.querySelector('[data-cat="food"]').classList.add('selected');
-        selectedCategory = 'food';
-
-        sourceOptions.forEach(o => o.classList.remove('selected'));
-        document.querySelector('[data-source="boda"]').classList.add('selected');
-        selectedSource = 'boda';
     });
 
     const safariHint = document.getElementById('safari-hint');
@@ -471,68 +444,6 @@ function removeExpense(id) {
         updateDashboard();
         renderExpenses();
     }
-}
-
-// Gemini Vision Receipt Scanner
-async function processReceiptImage(file) {
-    modalOverlay.classList.remove('active');
-    scannerOverlay.classList.remove('hidden');
-    setScanText('Analizando recibo con IA... ✨');
-
-    try {
-        const base64 = await fileToBase64(file);
-        const mimeType = file.type || 'image/jpeg';
-
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { inline_data: { mime_type: mimeType, data: base64 } },
-                            { text: 'Este es un recibo. Extrae: 1) El nombre del establecimiento o descripción breve del gasto (en el idioma original del recibo, máximo 50 caracteres). 2) El importe TOTAL a pagar en rublos (solo el número). Responde ÚNICAMENTE con este JSON exacto sin explicaciones: {"description": "nombre", "amount": 123.45}. Si no puedes leer algún campo usa null.' }
-                        ]
-                    }]
-                })
-            }
-        );
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = text.match(/\{[\s\S]*?\}/);
-        const result = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-
-        scannerOverlay.classList.add('hidden');
-        modalOverlay.classList.add('active');
-        document.querySelector('.action-buttons').classList.add('hidden');
-        expenseForm.classList.remove('hidden');
-
-        if (result.description) document.getElementById('expense-desc').value = result.description;
-        if (result.amount) document.getElementById('expense-amount').value = result.amount;
-
-    } catch (err) {
-        console.error('Error Gemini:', err);
-        scannerOverlay.classList.add('hidden');
-        modalOverlay.classList.add('active');
-        document.querySelector('.action-buttons').classList.add('hidden');
-        expenseForm.classList.remove('hidden');
-    }
-}
-
-function setScanText(text) {
-    const el = document.querySelector('.scan-text');
-    if (el) el.textContent = text;
-}
-
-function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
 }
 
 // GitHub Backup
