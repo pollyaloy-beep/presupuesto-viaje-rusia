@@ -1,75 +1,33 @@
+// Supabase Config
+const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9zrAz8Yu85zKhPr01Pjwhw_E3iJGt0a";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // Exchange Rate: 1 EUR = X RUB
-const EXCHANGE_RATE = 90.00; // Fixed rate as requested
+const EXCHANGE_RATE = 90.00;
 
 // State
 let expenses = [];
 let selectedCategory = 'food';
 let selectedSource = 'boda';
+let supabaseChannel = null;
 
-
-// Gun.js State - Super-Relay List
-const PEERS = [
-    'https://gun-manhattan.herokuapp.com/gun',
-    'https://relay.peer.ooo/gun',
-    'https://gun-us.herokuapp.com/gun',
-    'https://gun-eu.herokuapp.com/gun',
-    'https://gunjs.herokuapp.com/gun',
-    'https://gun-relay.herokuapp.com/gun',
-    'https://gun-amsterdam.herokuapp.com/gun'
-];
-
-let gun = Gun(PEERS);
+// Room State
 const DEFAULT_ROOM = 'viaje-rusia-polina-xevi-2026';
 let syncRoomId = localStorage.getItem('viaje-rusia-room-id') || DEFAULT_ROOM;
-let room = gun.get(syncRoomId);
-
-// Connection Heartbeat
-function checkConnection() {
-    const peers = gun.back('opt.peers');
-    let connected = false;
-    for (let id in peers) {
-        if (peers[id].wire && peers[id].wire.readyState === 1) {
-            connected = true;
-            break;
-        }
-    }
-    
-    if (connected) {
-        connectionDot.classList.add('online');
-    } else {
-        connectionDot.classList.remove('online');
-        // Aggressive reconnection
-        console.log("Reconectando a peers...");
-        gun.opt({ peers: PEERS });
-    }
-}
-
-// Check every 3 seconds
-setInterval(checkConnection, 3000);
-
-// Gun events
-gun.on('hi', () => connectionDot.classList.add('online'));
-gun.on('bye', () => checkConnection());
 
 // GitHub State
 let ghToken = localStorage.getItem('viaje-rusia-gh-token');
 let ghRepo = localStorage.getItem('viaje-rusia-gh-repo');
-let ghFileSha = null;
 
 // DOM Elements
 const syncButton = document.getElementById('sync-button');
 const syncModal = document.getElementById('sync-modal');
 const closeSyncModal = document.getElementById('close-sync-modal');
-const btnCreateRoom = document.getElementById('btn-create-room');
 const btnJoinRoom = document.getElementById('btn-join-room');
-const btnLeaveRoom = document.getElementById('btn-leave-room');
 const joinCodeInput = document.getElementById('join-code');
 const displayRoomCode = document.getElementById('display-room-code');
-const syncStatus = document.getElementById('sync-status');
-const syncSetup = document.getElementById('sync-setup');
-const syncInfo = document.getElementById('sync-info');
 const btnCopyCode = document.getElementById('btn-copy-code');
-const qrcodeEl = document.getElementById('qrcode');
 const connectionDot = document.getElementById('connection-dot');
 
 const tabBtns = document.querySelectorAll('.tab-btn');
@@ -105,10 +63,7 @@ function init() {
     setupSyncListeners();
     registerServiceWorker();
     checkStandalone();
-    
-    // Auto-init Gun.js Sync
-    console.log("Iniciando sincronización con sala:", syncRoomId);
-    initGunSync();
+    initSupabaseSync();
 }
 
 // Service Worker Registration
@@ -116,18 +71,17 @@ function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('Service Worker registrado ✨'))
+                .then(() => console.log('Service Worker registrado'))
                 .catch(err => console.log('Error registering SW', err));
         });
     }
 }
 
-// Standalone Mode Detection (for Safari Hint)
+// Standalone Mode Detection
 function checkStandalone() {
     const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
     const safariHint = document.getElementById('safari-hint');
     const hintDismissed = localStorage.getItem('safari-hint-dismissed');
-
     if (!isStandalone && !hintDismissed) {
         safariHint.classList.remove('hidden');
     }
@@ -141,21 +95,96 @@ function loadExpenses() {
     }
 }
 
-// Save to LocalStorage
-function saveExpenses() {
+// Save to LocalStorage + Supabase
+async function saveExpenses() {
     const now = Date.now();
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
     localStorage.setItem('viaje-rusia-last-update', now.toString());
-    
-    // Sync to Gun.js with timestamp
-    room.put({ 
-        expenses: JSON.stringify(expenses), 
-        last_update: now 
+
+    const { error } = await supabase.from('budget_rooms').upsert({
+        id: syncRoomId,
+        expenses: expenses,
+        updated_at: new Date(now).toISOString()
     });
+
+    if (error) console.error('Error sincronizando con Supabase:', error);
 
     if (ghToken && ghRepo) {
         pushToGitHub();
     }
+}
+
+// Supabase Realtime Sync
+function initSupabaseSync() {
+    loadFromSupabase();
+    subscribeToRoom(syncRoomId);
+}
+
+async function loadFromSupabase() {
+    const { data, error } = await supabase
+        .from('budget_rooms')
+        .select('*')
+        .eq('id', syncRoomId)
+        .single();
+
+    if (error || !data) return;
+
+    applyRemoteData(data.expenses, new Date(data.updated_at).getTime());
+}
+
+function subscribeToRoom(roomId) {
+    if (supabaseChannel) {
+        supabase.removeChannel(supabaseChannel);
+    }
+
+    supabaseChannel = supabase
+        .channel(`room-${roomId}`)
+        .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'budget_rooms',
+            filter: `id=eq.${roomId}`
+        }, (payload) => {
+            if (payload.new && payload.new.expenses) {
+                applyRemoteData(
+                    payload.new.expenses,
+                    new Date(payload.new.updated_at).getTime()
+                );
+            }
+        })
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                connectionDot.classList.add('online');
+            } else {
+                connectionDot.classList.remove('online');
+            }
+        });
+}
+
+function applyRemoteData(remoteExpenses, remoteUpdate) {
+    const lastLocalUpdate = parseInt(localStorage.getItem('viaje-rusia-last-update') || '0');
+    if (remoteUpdate <= lastLocalUpdate) return;
+
+    const localIds = new Set(expenses.map(e => e.id));
+    let merged = [...expenses];
+
+    remoteExpenses.forEach(re => {
+        if (!localIds.has(re.id)) merged.push(re);
+    });
+
+    // Remote deletion: if remote is newer and has fewer items, trust remote
+    if (remoteExpenses.length < merged.length) {
+        expenses = remoteExpenses;
+    } else {
+        expenses = merged;
+    }
+
+    expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
+    localStorage.setItem('viaje-rusia-last-update', remoteUpdate.toString());
+    localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
+    updateDashboard();
+    renderExpenses();
+    console.log('Sincronización Supabase completada');
 }
 
 // Update Dashboard Totals
@@ -163,19 +192,12 @@ function updateDashboard() {
     const totalRub = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
     const totalEur = totalRub / EXCHANGE_RATE;
 
-    const totalBoda = expenses
-        .filter(exp => exp.source === 'boda')
-        .reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
-    const totalPolina = expenses
-        .filter(exp => exp.source === 'polina')
-        .reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
-    const totalXevi = expenses
-        .filter(exp => exp.source === 'xevi')
-        .reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+    const totalBoda = expenses.filter(exp => exp.source === 'boda').reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+    const totalPolina = expenses.filter(exp => exp.source === 'polina').reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+    const totalXevi = expenses.filter(exp => exp.source === 'xevi').reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
 
     totalRubEl.textContent = formatCurrency(totalRub, '₽');
     totalEurEl.textContent = `(${formatCurrency(totalEur, '€')})`;
-    
     totalBodaEl.textContent = formatCurrency(totalBoda, '₽');
     totalPolinaEl.textContent = formatCurrency(totalPolina, '₽');
     totalXeviEl.textContent = formatCurrency(totalXevi, '₽');
@@ -183,9 +205,9 @@ function updateDashboard() {
 
 // Format Currency
 function formatCurrency(amount, symbol) {
-    return new Intl.NumberFormat('es-ES', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
+    return new Intl.NumberFormat('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     }).format(amount) + ' ' + symbol;
 }
 
@@ -202,14 +224,12 @@ function renderExpenses() {
     }
 
     expensesListEl.innerHTML = '';
-    
-    // Sort by newest first
     const sortedExpenses = [...expenses].reverse();
 
     sortedExpenses.forEach(exp => {
         const eurAmount = exp.amount / EXCHANGE_RATE;
         const iconInfo = getCategoryIcon(exp.category);
-        
+
         const el = document.createElement('div');
         el.className = 'expense-item';
         el.innerHTML = `
@@ -238,8 +258,8 @@ function renderExpenses() {
 
 function formatDate(dateString) {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-ES', { 
-        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' 
+    return new Intl.DateTimeFormat('es-ES', {
+        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
     }).format(date);
 }
 
@@ -256,35 +276,30 @@ function getCategoryIcon(cat) {
 
 // Event Listeners
 function setupEventListeners() {
-    // FAB -> Open Modal
     fabButton.addEventListener('click', () => {
         modalOverlay.classList.add('active');
         expenseForm.classList.add('hidden');
         document.querySelector('.action-buttons').classList.remove('hidden');
     });
 
-    // Close Modal
     closeModal.addEventListener('click', () => {
         modalOverlay.classList.remove('active');
         expenseForm.reset();
     });
 
-    // Manual Button
     btnManual.addEventListener('click', () => {
         document.querySelector('.action-buttons').classList.add('hidden');
         expenseForm.classList.remove('hidden');
         document.getElementById('expense-desc').focus();
     });
 
-    // Camera Input (Simulate OCR)
     cameraInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files.length > 0) {
             simulateScanner();
-            e.target.value = ''; // Reset input
+            e.target.value = '';
         }
     });
 
-    // Category Selection
     catOptions.forEach(opt => {
         opt.addEventListener('click', () => {
             catOptions.forEach(o => o.classList.remove('selected'));
@@ -293,7 +308,6 @@ function setupEventListeners() {
         });
     });
 
-    // Source Selection
     sourceOptions.forEach(opt => {
         opt.addEventListener('click', () => {
             sourceOptions.forEach(o => o.classList.remove('selected'));
@@ -302,32 +316,25 @@ function setupEventListeners() {
         });
     });
 
-    // Submit Form
     expenseForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        
         const desc = document.getElementById('expense-desc').value;
         const amount = parseFloat(document.getElementById('expense-amount').value);
-        
         if (!desc || isNaN(amount)) return;
 
         addExpense(desc, amount, selectedCategory, selectedSource);
-        
         modalOverlay.classList.remove('active');
         expenseForm.reset();
-        
-        // Reset category to food
+
         catOptions.forEach(o => o.classList.remove('selected'));
         document.querySelector('[data-cat="food"]').classList.add('selected');
         selectedCategory = 'food';
 
-        // Reset source to boda
         sourceOptions.forEach(o => o.classList.remove('selected'));
         document.querySelector('[data-source="boda"]').classList.add('selected');
         selectedSource = 'boda';
     });
 
-    // Close Safari Hint
     const safariHint = document.getElementById('safari-hint');
     const closeHintBtn = document.getElementById('close-hint');
     if (closeHintBtn) {
@@ -337,12 +344,7 @@ function setupEventListeners() {
         });
     }
 
-    // Sync Button
     syncButton.addEventListener('click', () => {
-        if (!connectionDot.classList.contains('online')) {
-            console.log("Forzando reconexión manual...");
-            gun.opt({ peers: PEERS });
-        }
         syncModal.classList.add('active');
         updateSyncUI();
     });
@@ -351,7 +353,6 @@ function setupEventListeners() {
         syncModal.classList.remove('active');
     });
 
-    // Tab Switching
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             tabBtns.forEach(b => b.classList.remove('active'));
@@ -361,20 +362,52 @@ function setupEventListeners() {
         });
     });
 
-    // GitHub Save
     btnSaveGithub.addEventListener('click', () => {
         ghToken = ghTokenInput.value.trim();
         ghRepo = ghRepoInput.value.trim();
         if (ghToken && ghRepo) {
             localStorage.setItem('viaje-rusia-gh-token', ghToken);
             localStorage.setItem('viaje-rusia-gh-repo', ghRepo);
-            alert("¡GitHub conectado! Los datos se sincronizarán con tu repositorio.");
+            alert('¡GitHub conectado! Los datos se sincronizarán con tu repositorio.');
             pushToGitHub();
         }
     });
 
     if (ghToken) ghTokenInput.value = ghToken;
     if (ghRepo) ghRepoInput.value = ghRepo;
+
+    // Export / Import
+    document.getElementById('btn-export').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(expenses, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gastos-rusia.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('import-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const imported = JSON.parse(ev.target.result);
+                if (Array.isArray(imported)) {
+                    expenses = imported;
+                    saveExpenses();
+                    updateDashboard();
+                    renderExpenses();
+                    alert('Importación completada.');
+                }
+            } catch {
+                alert('Archivo no válido.');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
 }
 
 // Sync Functions
@@ -391,97 +424,17 @@ async function joinRoom(code) {
     if (!code) return;
     syncRoomId = code;
     localStorage.setItem('viaje-rusia-room-id', code);
-    location.reload(); // Reload to reconnect Gun.js to new room
+    subscribeToRoom(code);
+    await loadFromSupabase();
+    updateSyncUI();
+    syncModal.classList.remove('active');
 }
 
 function updateSyncUI() {
     displayRoomCode.textContent = syncRoomId;
-    syncButton.classList.add('active');
 }
 
-function initGunSync() {
-    let lastLocalUpdate = parseInt(localStorage.getItem('viaje-rusia-last-update') || '0');
-
-    room.on((data) => {
-        if (data && data.expenses) {
-            const remoteUpdate = data.last_update || 0;
-            
-            if (remoteUpdate > lastLocalUpdate) {
-                const remoteExpenses = JSON.parse(data.expenses);
-                
-                // Merging logic: Keep all unique expenses from both sides
-                const localIds = new Set(expenses.map(e => e.id));
-                let merged = [...expenses];
-                let hasNew = false;
-
-                remoteExpenses.forEach(re => {
-                    if (!localIds.has(re.id)) {
-                        merged.push(re);
-                        hasNew = true;
-                    }
-                });
-
-                // If remote has fewer expenses than merged, it might be a deletion
-                // But for now, we prioritize additions to be safe.
-                // For deletions to work, we'd need a tombstone system.
-                // Simple compromise: if lengths are different and remote is newer, take remote.
-                if (remoteExpenses.length < merged.length && remoteUpdate > lastLocalUpdate) {
-                   // This is likely a deletion on the other side
-                   expenses = remoteExpenses;
-                } else {
-                   expenses = merged;
-                }
-
-                expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
-                lastLocalUpdate = remoteUpdate;
-                localStorage.setItem('viaje-rusia-last-update', lastLocalUpdate.toString());
-                localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
-                updateDashboard();
-                renderExpenses();
-                console.log("Sincronización inteligente (v2) completada ✅");
-            }
-        }
-    });
-}
-
-async function pushToGitHub() {
-    if (!ghToken || !ghRepo) return;
-    
-    const url = `https://api.github.com/repos/${ghRepo}/contents/expenses.json`;
-    const content = btoa(JSON.stringify(expenses, null, 2));
-    
-    try {
-        // First get the SHA if file exists
-        const getRes = await fetch(url, {
-            headers: { 'Authorization': `token ${ghToken}` }
-        });
-        
-        let sha = null;
-        if (getRes.status === 200) {
-            const data = await getRes.json();
-            sha = data.sha;
-        }
-        
-        const res = await fetch(url, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${ghToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: 'Update budget expenses',
-                content: content,
-                sha: sha
-            })
-        });
-        
-        if (res.ok) console.log("Sincronizado con GitHub ✅");
-        else console.error("Error al sincronizar con GitHub", await res.json());
-    } catch (e) {
-        console.error("Error GitHub API:", e);
-    }
-}
-
+// Add / Remove Expenses
 function addExpense(description, amount, category, source) {
     const newExpense = {
         id: Date.now().toString(),
@@ -491,7 +444,6 @@ function addExpense(description, amount, category, source) {
         source,
         date: new Date().toISOString()
     };
-    
     expenses.push(newExpense);
     saveExpenses();
     updateDashboard();
@@ -499,7 +451,7 @@ function addExpense(description, amount, category, source) {
 }
 
 function removeExpense(id) {
-    if (confirm("¿Seguro que quieres borrar este gasto?")) {
+    if (confirm('¿Seguro que quieres borrar este gasto?')) {
         expenses = expenses.filter(exp => exp.id !== id);
         saveExpenses();
         updateDashboard();
@@ -509,45 +461,59 @@ function removeExpense(id) {
 
 // Simulate AI Scanner
 function simulateScanner() {
-    // Hide modal temporarily
     modalOverlay.classList.remove('active');
-    
-    // Show scanner
     scannerOverlay.classList.remove('hidden');
-    
+
     setTimeout(() => {
-        // Hide scanner
         scannerOverlay.classList.add('hidden');
-        
-        // Open modal with form pre-filled
         modalOverlay.classList.add('active');
         document.querySelector('.action-buttons').classList.add('hidden');
         expenseForm.classList.remove('hidden');
-        
-        // Mock data
+
         const mockData = [
             { desc: 'Restaurante Teremok', amount: 1250.00, cat: 'food', source: 'boda' },
             { desc: 'Billete de Metro', amount: 65.00, cat: 'transport', source: 'polina' },
             { desc: 'Cafetería Pushkin', amount: 850.50, cat: 'food', source: 'xevi' },
             { desc: 'Matrioshka Souvenir', amount: 3500.00, cat: 'shopping', source: 'boda' }
         ];
-        
+
         const randomItem = mockData[Math.floor(Math.random() * mockData.length)];
-        
         document.getElementById('expense-desc').value = randomItem.desc;
         document.getElementById('expense-amount').value = randomItem.amount;
-        
-        // Select category
+
         catOptions.forEach(o => o.classList.remove('selected'));
         document.querySelector(`[data-cat="${randomItem.cat}"]`).classList.add('selected');
         selectedCategory = randomItem.cat;
 
-        // Select source
         sourceOptions.forEach(o => o.classList.remove('selected'));
         document.querySelector(`[data-source="${randomItem.source}"]`).classList.add('selected');
         selectedSource = randomItem.source;
-        
     }, 2500);
+}
+
+// GitHub Backup
+async function pushToGitHub() {
+    if (!ghToken || !ghRepo) return;
+    const url = `https://api.github.com/repos/${ghRepo}/contents/expenses.json`;
+    const content = btoa(JSON.stringify(expenses, null, 2));
+
+    try {
+        const getRes = await fetch(url, { headers: { 'Authorization': `token ${ghToken}` } });
+        let sha = null;
+        if (getRes.status === 200) {
+            const data = await getRes.json();
+            sha = data.sha;
+        }
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `token ${ghToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'Update budget expenses', content, sha })
+        });
+        if (res.ok) console.log('Sincronizado con GitHub');
+        else console.error('Error GitHub', await res.json());
+    } catch (e) {
+        console.error('Error GitHub API:', e);
+    }
 }
 
 // Start App
