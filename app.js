@@ -1,7 +1,7 @@
 // Supabase Config
 const SUPABASE_URL = "https://wzqyemxubilzmibifzav.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9zrAz8Yu85zKhPr01Pjwhw_E3iJGt0a";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Exchange Rate: 1 EUR = X RUB
 const EXCHANGE_RATE = 90.00;
@@ -104,7 +104,7 @@ async function saveExpenses() {
     localStorage.setItem('viaje-rusia-expenses', JSON.stringify(expenses));
     localStorage.setItem('viaje-rusia-last-update', now.toString());
 
-    const { error } = await supabase.from('budget_rooms').upsert({
+    const { error } = await db.from('budget_rooms').upsert({
         id: syncRoomId,
         expenses: expenses,
         updated_at: new Date(now).toISOString()
@@ -124,7 +124,7 @@ function initSupabaseSync() {
 }
 
 async function loadFromSupabase() {
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('budget_rooms')
         .select('*')
         .eq('id', syncRoomId)
@@ -137,10 +137,10 @@ async function loadFromSupabase() {
 
 function subscribeToRoom(roomId) {
     if (supabaseChannel) {
-        supabase.removeChannel(supabaseChannel);
+        db.removeChannel(supabaseChannel);
     }
 
-    supabaseChannel = supabase
+    supabaseChannel = db
         .channel(`room-${roomId}`)
         .on('postgres_changes', {
             event: '*',
