@@ -89,9 +89,12 @@ function checkStandalone() {
 
 // Load from LocalStorage
 function loadExpenses() {
-    const saved = localStorage.getItem('viaje-rusia-expenses');
-    if (saved) {
-        expenses = JSON.parse(saved);
+    try {
+        const saved = localStorage.getItem('viaje-rusia-expenses');
+        if (saved) expenses = JSON.parse(saved);
+    } catch {
+        expenses = [];
+        localStorage.removeItem('viaje-rusia-expenses');
     }
 }
 
@@ -295,7 +298,7 @@ function setupEventListeners() {
 
     cameraInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files.length > 0) {
-            simulateScanner();
+            processReceiptImage(e.target.files[0]);
             e.target.value = '';
         }
     });
@@ -459,36 +462,86 @@ function removeExpense(id) {
     }
 }
 
-// Simulate AI Scanner
-function simulateScanner() {
+// OCR Receipt Scanner
+async function processReceiptImage(file) {
     modalOverlay.classList.remove('active');
     scannerOverlay.classList.remove('hidden');
+    setScanText('Cargando motor OCR...');
 
-    setTimeout(() => {
+    try {
+        const worker = await Tesseract.createWorker('rus+eng', 1, {
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    setScanText(`Leyendo texto... ${Math.round(m.progress * 100)}%`);
+                } else if (m.status === 'loading language traineddata') {
+                    setScanText('Cargando idioma ruso...');
+                }
+            }
+        });
+
+        setScanText('Analizando ticket... ✨');
+        const { data: { text } } = await worker.recognize(file);
+        await worker.terminate();
+
+        const { description, amount } = parseReceipt(text);
+
         scannerOverlay.classList.add('hidden');
         modalOverlay.classList.add('active');
         document.querySelector('.action-buttons').classList.add('hidden');
         expenseForm.classList.remove('hidden');
 
-        const mockData = [
-            { desc: 'Restaurante Teremok', amount: 1250.00, cat: 'food', source: 'boda' },
-            { desc: 'Billete de Metro', amount: 65.00, cat: 'transport', source: 'polina' },
-            { desc: 'Cafetería Pushkin', amount: 850.50, cat: 'food', source: 'xevi' },
-            { desc: 'Matrioshka Souvenir', amount: 3500.00, cat: 'shopping', source: 'boda' }
-        ];
+        if (description) document.getElementById('expense-desc').value = description;
+        if (amount) document.getElementById('expense-amount').value = amount;
 
-        const randomItem = mockData[Math.floor(Math.random() * mockData.length)];
-        document.getElementById('expense-desc').value = randomItem.desc;
-        document.getElementById('expense-amount').value = randomItem.amount;
+    } catch (err) {
+        console.error('Error OCR:', err);
+        scannerOverlay.classList.add('hidden');
+        modalOverlay.classList.add('active');
+        document.querySelector('.action-buttons').classList.add('hidden');
+        expenseForm.classList.remove('hidden');
+        setScanText('Analizando ticket... ✨');
+    }
+}
 
-        catOptions.forEach(o => o.classList.remove('selected'));
-        document.querySelector(`[data-cat="${randomItem.cat}"]`).classList.add('selected');
-        selectedCategory = randomItem.cat;
+function setScanText(text) {
+    const el = document.querySelector('.scan-text');
+    if (el) el.textContent = text;
+}
 
-        sourceOptions.forEach(o => o.classList.remove('selected'));
-        document.querySelector(`[data-source="${randomItem.source}"]`).classList.add('selected');
-        selectedSource = randomItem.source;
-    }, 2500);
+function parseReceipt(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+
+    let amount = null;
+
+    // Search for total with Russian/English keywords
+    const totalRegex = /(?:итого|сумма|к\s*оплате|total|sum)[^\d]*(\d[\d\s]*[,\.]\d{2})/gi;
+    const match = totalRegex.exec(text);
+    if (match) {
+        amount = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
+    }
+
+    // Fallback: take the largest price-like number in the text
+    if (!amount) {
+        const prices = [];
+        const priceRegex = /(\d{1,6}[,\.]\d{2})/g;
+        let m;
+        while ((m = priceRegex.exec(text)) !== null) {
+            prices.push(parseFloat(m[1].replace(',', '.')));
+        }
+        if (prices.length > 0) amount = Math.max(...prices);
+    }
+
+    // Description: first meaningful non-numeric line
+    let description = '';
+    for (const line of lines) {
+        if (line.length >= 3 && !/^[\d\s,\.\-:]+$/.test(line)) {
+            description = line.substring(0, 50);
+            break;
+        }
+    }
+    if (!description) description = 'Gasto de recibo';
+
+    return { description, amount };
 }
 
 // GitHub Backup
