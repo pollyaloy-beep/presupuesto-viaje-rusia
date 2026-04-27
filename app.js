@@ -215,22 +215,27 @@ function updateDashboard() {
     totalPolinaEl.textContent = formatCurrency(totalPolina, '₽');
     totalXeviEl.textContent = formatCurrency(totalXevi, '₽');
 
-    // Remaining budgets
-    const remainingBoda = BUDGET_BODA - totalBoda;
-    const remainingXevi = BUDGET_XEVI - totalXevi;
+    // Remaining budgets + progress bars
+    updateBudget('boda', totalBoda, BUDGET_BODA);
+    updateBudget('xevi', totalXevi, BUDGET_XEVI);
+}
 
-    const remBodaEl = document.getElementById('remaining-boda');
-    const remXeviEl = document.getElementById('remaining-xevi');
+function updateBudget(source, spent, budget) {
+    const remaining = budget - spent;
+    const pct = Math.min((spent / budget) * 100, 100);
 
-    remBodaEl.textContent = remainingBoda >= 0
-        ? `Quedan ${formatCurrency(remainingBoda, '₽')}`
-        : `¡Superado ${formatCurrency(Math.abs(remainingBoda), '₽')}!`;
-    remBodaEl.className = 'source-remaining' + (remainingBoda < 0 ? ' over-budget' : '');
+    const remEl = document.getElementById(`remaining-${source}`);
+    const barEl = document.getElementById(`bar-${source}`);
 
-    remXeviEl.textContent = remainingXevi >= 0
-        ? `Quedan ${formatCurrency(remainingXevi, '₽')}`
-        : `¡Superado ${formatCurrency(Math.abs(remainingXevi), '₽')}!`;
-    remXeviEl.className = 'source-remaining' + (remainingXevi < 0 ? ' over-budget' : '');
+    remEl.textContent = remaining >= 0
+        ? `Quedan ${formatCurrency(remaining, '₽')}`
+        : `¡Superado ${formatCurrency(Math.abs(remaining), '₽')}!`;
+    remEl.className = 'source-remaining' + (remaining < 0 ? ' over-budget' : '');
+
+    barEl.style.width = `${pct}%`;
+    barEl.style.background = remaining < 0
+        ? '#dc2626'
+        : 'linear-gradient(90deg, var(--ocean-deep), var(--pink-vibrant))';
 }
 
 // Format Currency
